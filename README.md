@@ -25,6 +25,17 @@ Open the URL Vite prints (usually http://localhost:5173). The Netlify Vite plugi
 2. Optional: set `STRIPE_SECRET_KEY` for live card payments.
 3. Licence PDFs/images land in the `drivesa-licences` Blob store; booking records in `drivesa-bookings`.
 
+## iOS app (latest)
+
+Native iOS build via **Capacitor 8**, deployment target **iOS 18+**.
+
+```bash
+npm run build:ios   # web build + sync into ios/
+npm run open:ios    # opens Xcode (Mac required)
+```
+
+See [`ios/README.md`](ios/README.md). Optional: `VITE_API_BASE=https://your-netlify-site.netlify.app` so the phone uses your live API.
+
 ## Admin pricing
 
 1. Open **Admin** in the nav (`/admin`).
@@ -36,7 +47,7 @@ On Netlify, set env var `DRIVE_SA_ADMIN_PIN` to your own secret PIN.
 
 ## Stack
 
-Vite + React + TypeScript · React Router · Netlify Functions · Netlify Blobs · date-fns
+Vite + React + TypeScript · React Router · Capacitor iOS · Netlify Functions · Netlify Blobs · date-fns
 
 ## Local tip
 

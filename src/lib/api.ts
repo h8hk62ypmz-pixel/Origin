@@ -6,6 +6,7 @@ import type {
   LessonSlot,
 } from '@shared/types'
 import { LESSON_LABELS, LESSON_PRICES } from '@shared/types'
+import { apiUrl } from './native'
 
 const SLOTS_KEY = 'drivesa.slots'
 const BOOKINGS_KEY = 'drivesa.bookings'
@@ -43,7 +44,7 @@ function writeBookings(bookings: Booking[]) {
 
 async function tryApi<T>(path: string, init?: RequestInit): Promise<T | null> {
   try {
-    const res = await fetch(path, init)
+    const res = await fetch(apiUrl(path), init)
     if (!res.ok) {
       if (res.status >= 500 || res.status === 404) return null
       const err = (await res.json().catch(() => ({}))) as { error?: string }
@@ -184,7 +185,7 @@ export async function savePrices(
   applyToOpenSlots = true,
 ): Promise<{ prices: LessonPriceMap; message: string; updatedOpenSlots?: number }> {
   try {
-    const res = await fetch('/api/admin/prices', {
+    const res = await fetch(apiUrl('/api/admin/prices'), {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -233,7 +234,7 @@ export async function updateSlotPrice(
   priceCents: number,
 ): Promise<{ message: string }> {
   try {
-    const res = await fetch('/api/admin/slots', {
+    const res = await fetch(apiUrl('/api/admin/slots'), {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',

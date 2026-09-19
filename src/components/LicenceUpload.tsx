@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { LicenceAttachment, LicenceType } from '@shared/types'
 import { LICENCE_LABELS } from '@shared/types'
+import { isNativeApp, pickLicencePhoto } from '../lib/native'
 
 interface Props {
   value: Partial<LicenceAttachment>
@@ -34,6 +35,27 @@ export function LicenceUpload({ value, onChange }: Props) {
       contentType: file.type,
       dataUrl,
     })
+  }
+
+  async function openPicker() {
+    setError(null)
+    if (isNativeApp()) {
+      try {
+        const photo = await pickLicencePhoto()
+        if (photo) {
+          onChange({
+            ...value,
+            fileName: photo.fileName,
+            contentType: photo.contentType,
+            dataUrl: photo.dataUrl,
+          })
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not open camera or photos')
+      }
+      return
+    }
+    inputRef.current?.click()
   }
 
   return (
@@ -91,9 +113,9 @@ export function LicenceUpload({ value, onChange }: Props) {
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click()
+            if (e.key === 'Enter' || e.key === ' ') void openPicker()
           }}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => void openPicker()}
           onDragOver={(e) => {
             e.preventDefault()
             setDragging(true)
@@ -105,7 +127,11 @@ export function LicenceUpload({ value, onChange }: Props) {
             void handleFile(e.dataTransfer.files[0])
           }}
         >
-          <strong>Drop a photo or PDF of the licence</strong>
+          <strong>
+            {isNativeApp()
+              ? 'Take a photo or choose from library'
+              : 'Drop a photo or PDF of the licence'}
+          </strong>
           Learners, provisional, full SA, interstate, or international — attach it here so your
           instructor can verify before the lesson.
           <input
@@ -117,7 +143,11 @@ export function LicenceUpload({ value, onChange }: Props) {
           />
         </div>
 
-        {error && <div className="error-banner" style={{ marginTop: '0.75rem' }}>{error}</div>}
+        {error && (
+          <div className="error-banner" style={{ marginTop: '0.75rem' }}>
+            {error}
+          </div>
+        )}
 
         {value.fileName && value.dataUrl && (
           <div className="licence-preview">
