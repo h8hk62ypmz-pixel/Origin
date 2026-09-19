@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { fetchBookings, formatAud, getInstructor } from '../lib/api'
-import type { Booking } from '../types'
-import { LESSON_LABELS, LICENCE_LABELS } from '../types'
+import type { Booking } from '@shared/types'
+import { LESSON_LABELS, LICENCE_LABELS } from '@shared/types'
 
 export function ManagePage() {
   const [bookings, setBookings] = useState<Booking[]>([])

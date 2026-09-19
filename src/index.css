@@ -369,14 +369,61 @@ h3,
   border: none;
   background: var(--road);
   color: #f7f4ec;
-  padding: 0.4rem 0.45rem;
+  padding: 0.55rem 0.5rem;
   margin-bottom: 0.35rem;
   border-radius: var(--radius);
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   line-height: 1.25;
+  min-height: 2.6rem;
   transition: background 0.15s ease, transform 0.15s ease;
   animation: chipIn 0.35s ease both;
+  position: relative;
+  z-index: 1;
+}
+
+.slot-list {
+  margin-top: 1.15rem;
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+
+.slot-list h4 {
+  margin: 0 0 0.65rem;
+  font-size: 1.15rem;
+}
+
+.slot-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.75);
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.45rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.slot-row:hover {
+  border-color: var(--bush);
+  transform: translateX(2px);
+}
+
+.slot-row.is-selected {
+  background: var(--mark);
+  border-color: var(--mark-deep);
+}
+
+.slot-row small {
+  display: block;
+  margin-top: 0.2rem;
+  opacity: 0.75;
+  font-size: 0.82rem;
 }
 
 .slot-chip:hover {

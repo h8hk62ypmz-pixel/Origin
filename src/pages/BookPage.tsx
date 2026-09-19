@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { format, startOfWeek } from 'date-fns'
 import { WeekCalendar } from '../components/WeekCalendar'
 import { LicenceUpload } from '../components/LicenceUpload'
-import { INSTRUCTORS } from '../data/catalogue'
+import { INSTRUCTORS } from '@shared/catalogue'
 import {
   createBooking,
   createCheckout,
@@ -11,8 +11,8 @@ import {
   formatAud,
   getInstructor,
 } from '../lib/api'
-import type { CreateBookingPayload, LessonSlot, LicenceAttachment } from '../types'
-import { LESSON_LABELS } from '../types'
+import type { CreateBookingPayload, LessonSlot, LicenceAttachment } from '@shared/types'
+import { LESSON_LABELS } from '@shared/types'
 
 type Step = 1 | 2 | 3
 

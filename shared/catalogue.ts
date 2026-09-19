@@ -1,5 +1,5 @@
-import type { Instructor, LessonSlot, LessonType } from '../types'
-import { LESSON_PRICES } from '../types'
+import type { Instructor, LessonSlot, LessonType } from './types'
+import { LESSON_PRICES } from './types'
 import { addDays, setHours, setMinutes, startOfDay } from 'date-fns'
 
 export const INSTRUCTORS: Instructor[] = [

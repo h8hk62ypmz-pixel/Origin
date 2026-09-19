@@ -1,5 +1,5 @@
 import type { Config, Context } from '@netlify/functions'
-import type { Booking, CreateBookingPayload } from '../../src/types'
+import type { Booking, CreateBookingPayload } from '../../shared/types'
 import {
   corsPreflight,
   json,

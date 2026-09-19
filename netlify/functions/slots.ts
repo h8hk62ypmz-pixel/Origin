@@ -1,6 +1,6 @@
 import type { Config, Context } from '@netlify/functions'
 import { corsPreflight, json, loadSlots, saveSlots } from './_shared/store'
-import { generateOpenSlots } from '../../src/data/catalogue'
+import { generateOpenSlots } from '../../shared/catalogue'
 
 export default async (req: Request, _context: Context) => {
   if (req.method === 'OPTIONS') return corsPreflight()

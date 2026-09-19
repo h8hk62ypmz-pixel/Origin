@@ -28,3 +28,7 @@ Open the URL Vite prints (usually http://localhost:5173). The Netlify Vite plugi
 ## Stack
 
 Vite + React + TypeScript · React Router · Netlify Functions · Netlify Blobs · date-fns
+
+## Local tip
+
+The Netlify Vite plugin emulates Functions + Blobs in `npm run dev`. Edge Functions emulation is disabled (not used by this app).

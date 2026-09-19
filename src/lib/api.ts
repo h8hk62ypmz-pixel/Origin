@@ -1,5 +1,5 @@
-import { INSTRUCTORS, generateOpenSlots } from '../data/catalogue'
-import type { Booking, CreateBookingPayload, LessonSlot } from '../types'
+import { INSTRUCTORS, generateOpenSlots } from '@shared/catalogue'
+import type { Booking, CreateBookingPayload, LessonSlot } from '@shared/types'
 
 const SLOTS_KEY = 'drivesa.slots'
 const BOOKINGS_KEY = 'drivesa.bookings'

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import type { LicenceAttachment, LicenceType } from '../types'
-import { LICENCE_LABELS } from '../types'
+import type { LicenceAttachment, LicenceType } from '@shared/types'
+import { LICENCE_LABELS } from '@shared/types'
 
 interface Props {
   value: Partial<LicenceAttachment>

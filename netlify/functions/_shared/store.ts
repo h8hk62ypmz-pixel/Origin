@@ -1,6 +1,6 @@
 import { getStore } from '@netlify/blobs'
-import type { Booking, LessonSlot } from '../../src/types'
-import { generateOpenSlots } from '../../src/data/catalogue'
+import type { Booking, LessonSlot } from '../../../shared/types'
+import { generateOpenSlots } from '../../../shared/catalogue'
 
 const BOOKINGS_KEY = 'all-bookings'
 const SLOTS_KEY = 'open-slots'

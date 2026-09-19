@@ -5,8 +5,8 @@ import {
   isSameWeek,
   startOfWeek,
 } from 'date-fns'
-import type { LessonSlot } from '../types'
-import { LESSON_LABELS } from '../types'
+import type { LessonSlot } from '@shared/types'
+import { LESSON_LABELS } from '@shared/types'
 import { formatAud, getInstructor } from '../lib/api'
 
 interface Props {
@@ -112,6 +112,37 @@ export function WeekCalendar({
         {!isSameWeek(weekStart, today, { weekStartsOn: 1 }) && (
           <span>Showing week of {format(weekStart, 'd MMM')}</span>
         )}
+      </div>
+
+      <div className="slot-list" aria-label="Open lessons this week">
+        <h4>Open this week</h4>
+        {slots
+          .filter(
+            (s) =>
+              !s.booked &&
+              isSameWeek(new Date(s.start), weekStart, { weekStartsOn: 1 }),
+          )
+          .sort((a, b) => +new Date(a.start) - +new Date(b.start))
+          .slice(0, 12)
+          .map((slot) => {
+            const instructor = getInstructor(slot.instructorId)
+            return (
+              <button
+                key={`list-${slot.id}`}
+                type="button"
+                className={`slot-row${selectedId === slot.id ? ' is-selected' : ''}`}
+                onClick={() => onSelect(slot)}
+              >
+                <span>
+                  {format(new Date(slot.start), "EEE d MMM · h:mm a")}
+                  <small>
+                    {instructor?.name} · {slot.suburb} · {LESSON_LABELS[slot.lessonType]}
+                  </small>
+                </span>
+                <strong>{formatAud(slot.priceCents)}</strong>
+              </button>
+            )
+          })}
       </div>
     </div>
   )
