@@ -1,4 +1,4 @@
-import type { Instructor, LessonSlot, LessonType } from './types'
+import type { Instructor, LessonPriceMap, LessonSlot, LessonType } from './types'
 import { LESSON_PRICES } from './types'
 import { addDays, setHours, setMinutes, startOfDay } from 'date-fns'
 
@@ -44,7 +44,10 @@ const LESSON_ROTATION: LessonType[] = [
 ]
 
 /** Generate open lesson slots for the next 14 days (Adelaide-style weekday hours). */
-export function generateOpenSlots(fromDate = new Date()): LessonSlot[] {
+export function generateOpenSlots(
+  fromDate = new Date(),
+  prices: LessonPriceMap = LESSON_PRICES,
+): LessonSlot[] {
   const slots: LessonSlot[] = []
   const base = startOfDay(fromDate)
   const hours = [8, 9, 10, 11, 13, 14, 15, 16]
@@ -56,7 +59,6 @@ export function generateOpenSlots(fromDate = new Date()): LessonSlot[] {
 
     INSTRUCTORS.forEach((instructor, iIdx) => {
       hours.forEach((hour, hIdx) => {
-        // Thin out so the calendar isn't completely full
         if ((day + iIdx + hIdx) % 3 === 0) return
 
         const start = setMinutes(setHours(date, hour), 0)
@@ -69,7 +71,7 @@ export function generateOpenSlots(fromDate = new Date()): LessonSlot[] {
           start: start.toISOString(),
           end: end.toISOString(),
           lessonType,
-          priceCents: LESSON_PRICES[lessonType],
+          priceCents: prices[lessonType],
           suburb: instructor.suburb,
           booked: false,
         })

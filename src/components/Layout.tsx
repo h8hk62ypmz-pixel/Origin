@@ -18,6 +18,9 @@ export function Layout() {
             <NavLink to="/manage" className={({ isActive }) => (isActive ? 'active' : '')}>
               My bookings
             </NavLink>
+            <NavLink to="/admin" className={({ isActive }) => (isActive ? 'active' : '')}>
+              Admin
+            </NavLink>
           </div>
         </nav>
       </header>

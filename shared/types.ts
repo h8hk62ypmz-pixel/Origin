@@ -101,3 +101,10 @@ export const LESSON_PRICES: Record<LessonType, number> = {
   test_prep: 9000,
   international_conversion: 9500,
 }
+
+export type LessonPriceMap = Record<LessonType, number>
+
+export function isLessonType(value: string): value is LessonType {
+  return value in LESSON_LABELS
+}
+

@@ -1,8 +1,15 @@
 import { INSTRUCTORS, generateOpenSlots } from '@shared/catalogue'
-import type { Booking, CreateBookingPayload, LessonSlot } from '@shared/types'
+import type {
+  Booking,
+  CreateBookingPayload,
+  LessonPriceMap,
+  LessonSlot,
+} from '@shared/types'
+import { LESSON_LABELS, LESSON_PRICES } from '@shared/types'
 
 const SLOTS_KEY = 'drivesa.slots'
 const BOOKINGS_KEY = 'drivesa.bookings'
+const PRICES_KEY = 'drivesa.prices'
 
 function readSlots(): LessonSlot[] {
   try {
@@ -144,4 +151,124 @@ export function formatAud(cents: number) {
     style: 'currency',
     currency: 'AUD',
   }).format(cents / 100)
+}
+
+function readPrices(): LessonPriceMap {
+  try {
+    const raw = localStorage.getItem(PRICES_KEY)
+    if (raw) return { ...LESSON_PRICES, ...(JSON.parse(raw) as LessonPriceMap) }
+  } catch {
+    /* ignore */
+  }
+  return { ...LESSON_PRICES }
+}
+
+function writePrices(prices: LessonPriceMap) {
+  localStorage.setItem(PRICES_KEY, JSON.stringify(prices))
+}
+
+export async function fetchPrices(): Promise<{
+  prices: LessonPriceMap
+  labels: typeof LESSON_LABELS
+}> {
+  const api = await tryApi<{ prices: LessonPriceMap; labels: typeof LESSON_LABELS }>(
+    '/api/admin/prices',
+  )
+  if (api?.prices) return { prices: api.prices, labels: api.labels ?? LESSON_LABELS }
+  return { prices: readPrices(), labels: LESSON_LABELS }
+}
+
+export async function savePrices(
+  pin: string,
+  prices: LessonPriceMap,
+  applyToOpenSlots = true,
+): Promise<{ prices: LessonPriceMap; message: string; updatedOpenSlots?: number }> {
+  try {
+    const res = await fetch('/api/admin/prices', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Pin': pin,
+      },
+      body: JSON.stringify({ prices, applyToOpenSlots }),
+    })
+    const data = (await res.json()) as {
+      prices?: LessonPriceMap
+      message?: string
+      updatedOpenSlots?: number
+      error?: string
+    }
+    if (!res.ok) throw new Error(data.error || `Save failed (${res.status})`)
+    if (data.prices) writePrices(data.prices)
+    return {
+      prices: data.prices ?? prices,
+      message: data.message ?? 'Prices saved.',
+      updatedOpenSlots: data.updatedOpenSlots,
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Save failed'
+    if (msg.includes('PIN') || msg.includes('Invalid') || msg.includes('Save failed')) {
+      throw e instanceof Error ? e : new Error(msg)
+    }
+    // API unreachable — demo local fallback with default PIN
+    if (pin !== 'drivesa') throw new Error('Invalid admin PIN')
+
+    writePrices(prices)
+    const slots = readSlots()
+    for (const slot of slots) {
+      if (!slot.booked) slot.priceCents = prices[slot.lessonType]
+    }
+    writeSlots(slots)
+    return {
+      prices,
+      message: 'Prices saved locally (API offline). Open slots updated for customers.',
+      updatedOpenSlots: slots.filter((s) => !s.booked).length,
+    }
+  }
+}
+
+export async function updateSlotPrice(
+  pin: string,
+  slotId: string,
+  priceCents: number,
+): Promise<{ message: string }> {
+  try {
+    const res = await fetch('/api/admin/slots', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Pin': pin,
+      },
+      body: JSON.stringify({ slotId, priceCents }),
+    })
+    const data = (await res.json()) as { message?: string; error?: string }
+    if (!res.ok) throw new Error(data.error || `Update failed (${res.status})`)
+
+    const slots = readSlots()
+    const local = slots.find((s) => s.id === slotId)
+    if (local && !local.booked) {
+      local.priceCents = priceCents
+      writeSlots(slots)
+    }
+    return { message: data.message ?? 'Slot price updated.' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Update failed'
+    if (
+      msg.includes('PIN') ||
+      msg.includes('booked') ||
+      msg.includes('not found') ||
+      msg.includes('Update failed')
+    ) {
+      throw e instanceof Error ? e : new Error(msg)
+    }
+    if (pin !== 'drivesa') throw new Error('Invalid admin PIN')
+
+    const slots = readSlots()
+    const slot = slots.find((s) => s.id === slotId)
+    if (!slot) throw new Error('Slot not found')
+    if (slot.booked) throw new Error('That lesson is already booked — price is locked.')
+    slot.priceCents = priceCents
+    writeSlots(slots)
+    return { message: 'Customer will see this price when they book this time. (Saved locally.)' }
+  }
 }

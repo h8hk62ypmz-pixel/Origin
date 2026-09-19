@@ -25,6 +25,15 @@ Open the URL Vite prints (usually http://localhost:5173). The Netlify Vite plugi
 2. Optional: set `STRIPE_SECRET_KEY` for live card payments.
 3. Licence PDFs/images land in the `drivesa-licences` Blob store; booking records in `drivesa-bookings`.
 
+## Admin pricing
+
+1. Open **Admin** in the nav (`/admin`).
+2. Enter the PIN (default: `drivesa`).
+3. Edit **default lesson prices** and click **Save prices for customers** — all open (unbooked) times update.
+4. Or set a **one-off price** on a single open slot for a custom customer quote.
+
+On Netlify, set env var `DRIVE_SA_ADMIN_PIN` to your own secret PIN.
+
 ## Stack
 
 Vite + React + TypeScript · React Router · Netlify Functions · Netlify Blobs · date-fns

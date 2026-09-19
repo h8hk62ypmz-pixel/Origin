@@ -1,6 +1,12 @@
 import type { Config, Context } from '@netlify/functions'
-import { corsPreflight, json, loadSlots, saveSlots } from './_shared/store'
 import { generateOpenSlots } from '../../shared/catalogue'
+import {
+  corsPreflight,
+  json,
+  loadPrices,
+  loadSlots,
+  saveSlots,
+} from './_shared/store'
 
 export default async (req: Request, _context: Context) => {
   if (req.method === 'OPTIONS') return corsPreflight()
@@ -12,7 +18,11 @@ export default async (req: Request, _context: Context) => {
 
     let slots = await loadSlots()
     if (refresh) {
-      slots = generateOpenSlots()
+      const prices = await loadPrices()
+      const booked = slots.filter((s) => s.booked)
+      const bookedIds = new Set(booked.map((s) => s.id))
+      const fresh = generateOpenSlots(new Date(), prices)
+      slots = [...booked, ...fresh.filter((s) => !bookedIds.has(s.id))]
       await saveSlots(slots)
     }
 
