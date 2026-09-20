@@ -44,6 +44,7 @@ export function BookPage() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [notes, setNotes] = useState('')
+  const [meetupLocation, setMeetupLocation] = useState('')
   const [licence, setLicence] = useState<Partial<LicenceAttachment>>({})
   const [checkoutHint, setCheckoutHint] = useState<string | null>(null)
 
@@ -142,6 +143,7 @@ export function BookPage() {
         email,
         phone,
         notes,
+        meetupLocation,
         licence: licence as LicenceAttachment,
         paymentMethod: 'demo',
         paymentChoice,
@@ -337,13 +339,23 @@ export function BookPage() {
                   />
                 </div>
                 <div className="field full">
+                  <label htmlFor="meetupLocation">Meetup location suggestion</label>
+                  <input
+                    id="meetupLocation"
+                    value={meetupLocation}
+                    onChange={(e) => setMeetupLocation(e.target.value)}
+                    placeholder="e.g. Coles car park, Norwood Parade — optional"
+                    autoComplete="street-address"
+                  />
+                </div>
+                <div className="field full">
                   <label htmlFor="notes">Notes for instructor</label>
                   <textarea
                     id="notes"
                     rows={3}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Pickup suburb, dual-control preference, test date…"
+                    placeholder="Dual-control preference, test date, anything else…"
                   />
                 </div>
               </div>

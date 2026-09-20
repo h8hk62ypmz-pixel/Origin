@@ -178,6 +178,7 @@ export async function createBooking(payload: CreateBookingPayload): Promise<Book
     email: payload.email.trim().toLowerCase(),
     phone: payload.phone.trim(),
     notes: payload.notes?.trim(),
+    meetupLocation: payload.meetupLocation?.trim() || undefined,
     licence: { ...payload.licence, dataUrl: undefined },
     paymentStatus: payload.paymentMethod === 'demo' ? 'demo_paid' : 'paid',
     paymentChoice,

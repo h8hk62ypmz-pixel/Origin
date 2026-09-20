@@ -88,6 +88,18 @@ export function ConfirmationPage() {
         <dd>
           {booking.studentName} · {booking.email} · {booking.phone}
         </dd>
+        {booking.meetupLocation && (
+          <>
+            <dt>Meetup suggestion</dt>
+            <dd>{booking.meetupLocation}</dd>
+          </>
+        )}
+        {booking.notes && (
+          <>
+            <dt>Notes</dt>
+            <dd>{booking.notes}</dd>
+          </>
+        )}
         <dt>Licence on file</dt>
         <dd>
           {LICENCE_LABELS[booking.licence.type]}

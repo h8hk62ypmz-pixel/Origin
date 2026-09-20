@@ -222,6 +222,18 @@ export function AdminPage() {
                       ? ` deposit (${formatAud(b.remainingCents ?? 0)} remaining)`
                       : ' in full'}{' '}
                     · block total {formatAud(b.totalCents ?? b.amountCents)}
+                    {b.meetupLocation ? (
+                      <>
+                        <br />
+                        Meetup suggestion: {b.meetupLocation}
+                      </>
+                    ) : null}
+                    {b.notes ? (
+                      <>
+                        <br />
+                        Notes: {b.notes}
+                      </>
+                    ) : null}
                   </div>
                   <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem', fontSize: '0.9rem' }}>
                     {lessons.map((l) => (

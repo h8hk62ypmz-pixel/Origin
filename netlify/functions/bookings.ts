@@ -112,6 +112,7 @@ export default async (req: Request, _context: Context) => {
       email: body.email.trim().toLowerCase(),
       phone: body.phone.trim(),
       notes: body.notes?.trim(),
+      meetupLocation: body.meetupLocation?.trim() || undefined,
       licence: {
         type: body.licence.type,
         fileName: body.licence.fileName,

@@ -75,6 +75,8 @@ export interface Booking {
   email: string
   phone: string
   notes?: string
+  /** Customer-suggested meetup / pickup location */
+  meetupLocation?: string
   licence: LicenceAttachment
   paymentStatus: PaymentStatus
   paymentChoice: PaymentChoice
@@ -100,6 +102,8 @@ export interface CreateBookingPayload {
   email: string
   phone: string
   notes?: string
+  /** Customer-suggested meetup / pickup location */
+  meetupLocation?: string
   licence: LicenceAttachment
   paymentMethod: 'card' | 'demo'
   paymentChoice: PaymentChoice

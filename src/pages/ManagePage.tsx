@@ -74,6 +74,11 @@ export function ManagePage() {
               <p style={{ margin: '0 0 0.35rem' }}>
                 <strong>{b.studentName}</strong>
               </p>
+              {b.meetupLocation && (
+                <p style={{ margin: '0 0 0.35rem', fontSize: '0.92rem' }}>
+                  Meetup: {b.meetupLocation}
+                </p>
+              )}
               <p style={{ margin: 0, fontSize: '0.92rem', opacity: 0.75 }}>
                 Licence: {LICENCE_LABELS[b.licence.type]}
                 {b.licence.fileName ? ` (${b.licence.fileName})` : ''}
