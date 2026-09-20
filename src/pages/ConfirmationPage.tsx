@@ -3,7 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { fetchBookings, formatAud, getInstructor } from '../lib/api'
 import type { Booking } from '@shared/types'
-import { LESSON_LABELS, LICENCE_LABELS } from '@shared/types'
+import { APPROVAL_LABELS, LESSON_LABELS, LICENCE_LABELS } from '@shared/types'
 
 export function ConfirmationPage() {
   const { id } = useParams()
@@ -30,31 +30,59 @@ export function ConfirmationPage() {
     )
   }
 
-  const instructor = getInstructor(booking.instructorId)
+  const pending = booking.approvalStatus === 'pending' || !booking.approvalStatus
+  const lessons = booking.lessons?.length
+    ? booking.lessons
+    : [
+        {
+          slotId: booking.slotId,
+          start: booking.start,
+          end: booking.end,
+          lessonType: booking.lessonType,
+          instructorId: booking.instructorId,
+          suburb: booking.suburb,
+          priceCents: booking.totalCents ?? booking.amountCents,
+        },
+      ]
 
   return (
     <main className="shell success-panel">
-      <div className="check" aria-hidden>
-        ✓
+      <div className={`check${pending ? ' is-pending' : ''}`} aria-hidden>
+        {pending ? '…' : '✓'}
       </div>
-      <h1>You’re booked</h1>
-      <p style={{ opacity: 0.8, maxWidth: 420, margin: '0 auto' }}>
-        Payment received{booking.paymentStatus === 'demo_paid' ? ' (demo)' : ''}. Your instructor
-        can see the attached licence ahead of the lesson.
+      <h1>{pending ? 'Payment received — pending approval' : 'You’re confirmed'}</h1>
+      <p style={{ opacity: 0.8, maxWidth: 440, margin: '0 auto' }}>
+        {pending
+          ? 'Your lesson block is held on the calendar (not available to others) until an admin confirms it.'
+          : 'Admin has confirmed your lessons. You’re all set.'}
+        {booking.paymentStatus === 'demo_paid' ? ' (Demo payment.)' : ''}
       </p>
 
       <dl className="booking-meta">
         <dt>Reference</dt>
         <dd>{booking.id}</dd>
-        <dt>When</dt>
-        <dd>{format(new Date(booking.start), "EEEE d MMMM yyyy · h:mm a")}</dd>
-        <dt>Instructor</dt>
+        <dt>Status</dt>
+        <dd>{APPROVAL_LABELS[booking.approvalStatus ?? 'pending']}</dd>
+        <dt>Payment</dt>
         <dd>
-          {instructor?.name ?? 'Instructor'} · {booking.suburb}
+          Paid {formatAud(booking.amountPaidCents ?? booking.amountCents)}
+          {booking.paymentChoice === 'deposit'
+            ? ` deposit · ${formatAud(booking.remainingCents ?? 0)} remaining`
+            : ' (full block)'}
         </dd>
-        <dt>Lesson</dt>
+        <dt>Lessons in block</dt>
         <dd>
-          {LESSON_LABELS[booking.lessonType]} · {formatAud(booking.amountCents)}
+          <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.1rem' }}>
+            {lessons.map((l) => {
+              const instructor = getInstructor(l.instructorId)
+              return (
+                <li key={l.slotId}>
+                  {format(new Date(l.start), "EEE d MMM · h:mm a")} — {instructor?.name} ·{' '}
+                  {LESSON_LABELS[l.lessonType]} · {formatAud(l.priceCents)}
+                </li>
+              )
+            })}
+          </ul>
         </dd>
         <dt>Student</dt>
         <dd>
@@ -70,7 +98,7 @@ export function ConfirmationPage() {
 
       <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
         <Link to="/book" className="btn btn-ghost">
-          Book another
+          Back to calendar
         </Link>
         <Link to="/manage" className="btn btn-primary">
           View my bookings

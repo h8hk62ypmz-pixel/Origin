@@ -1,31 +1,47 @@
 import { INSTRUCTORS, generateOpenSlots } from '@shared/catalogue'
 import type {
+  ApprovalStatus,
   Booking,
+  BookingLesson,
   CreateBookingPayload,
   LessonPriceMap,
   LessonSlot,
+  PaymentChoice,
 } from '@shared/types'
-import { LESSON_LABELS, LESSON_PRICES } from '@shared/types'
+import {
+  LESSON_LABELS,
+  LESSON_PRICES,
+  calcPaymentAmounts,
+  isSlotOpen,
+  normalizeSlotStatus,
+} from '@shared/types'
 import { apiUrl } from './native'
 
 const SLOTS_KEY = 'drivesa.slots'
 const BOOKINGS_KEY = 'drivesa.bookings'
 const PRICES_KEY = 'drivesa.prices'
 
+function normalizeLocalSlots(slots: LessonSlot[]): LessonSlot[] {
+  return slots.map((slot) => {
+    const status = normalizeSlotStatus(slot)
+    return { ...slot, status, booked: status !== 'open' }
+  })
+}
+
 function readSlots(): LessonSlot[] {
   try {
     const raw = localStorage.getItem(SLOTS_KEY)
-    if (raw) return JSON.parse(raw) as LessonSlot[]
+    if (raw) return normalizeLocalSlots(JSON.parse(raw) as LessonSlot[])
   } catch {
     /* ignore */
   }
   const slots = generateOpenSlots()
   localStorage.setItem(SLOTS_KEY, JSON.stringify(slots))
-  return slots
+  return normalizeLocalSlots(slots)
 }
 
 function writeSlots(slots: LessonSlot[]) {
-  localStorage.setItem(SLOTS_KEY, JSON.stringify(slots))
+  localStorage.setItem(SLOTS_KEY, JSON.stringify(normalizeLocalSlots(slots)))
 }
 
 function readBookings(): Booking[] {
@@ -60,35 +76,52 @@ async function tryApi<T>(path: string, init?: RequestInit): Promise<T | null> {
 export async function fetchSlots(instructorId?: string): Promise<LessonSlot[]> {
   const q = instructorId ? `?instructorId=${encodeURIComponent(instructorId)}` : ''
   const api = await tryApi<{ slots: LessonSlot[] }>(`/api/slots${q}`)
-  if (api?.slots) return api.slots
+  if (api?.slots) return normalizeLocalSlots(api.slots)
 
   let slots = readSlots()
   if (instructorId) slots = slots.filter((s) => s.instructorId === instructorId)
   return slots
 }
 
-export async function createCheckout(slotId: string, email: string, studentName: string) {
+export async function createCheckout(
+  slotIds: string[],
+  email: string,
+  studentName: string,
+  paymentChoice: PaymentChoice,
+) {
   const api = await tryApi<{
     mode: string
     amountCents: number
+    totalCents?: number
+    remainingCents?: number
+    depositCents?: number
+    paymentChoice?: PaymentChoice
     currency: string
     url?: string
     message?: string
+    lessonCount?: number
   }>('/api/checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slotId, email, studentName }),
+    body: JSON.stringify({ slotIds, email, studentName, paymentChoice }),
   })
 
   if (api) return api
 
-  const slot = readSlots().find((s) => s.id === slotId)
-  if (!slot) throw new Error('Slot not found')
+  const slots = readSlots().filter((s) => slotIds.includes(s.id))
+  if (slots.length !== slotIds.length) throw new Error('Slot not found')
+  const totalCents = slots.reduce((sum, s) => sum + s.priceCents, 0)
+  const amounts = calcPaymentAmounts(totalCents, paymentChoice)
   return {
     mode: 'demo',
-    amountCents: slot.priceCents,
+    amountCents: amounts.amountPaidCents,
+    totalCents,
+    remainingCents: amounts.remainingCents,
+    depositCents: amounts.depositCents,
+    paymentChoice,
     currency: 'aud',
-    message: 'Local demo payment (API offline).',
+    lessonCount: slots.length,
+    message: 'Local demo payment (API offline). Admin approval still required.',
   }
 }
 
@@ -100,17 +133,46 @@ export async function createBooking(payload: CreateBookingPayload): Promise<Book
   })
   if (api?.booking) return api.booking
 
+  const slotIds = [
+    ...new Set(payload.slotIds?.length ? payload.slotIds : payload.slotId ? [payload.slotId] : []),
+  ]
   const slots = readSlots()
-  const slot = slots.find((s) => s.id === payload.slotId)
-  if (!slot) throw new Error('Slot not found')
-  if (slot.booked) throw new Error('That time was just booked. Pick another slot.')
+  const selected = slotIds.map((id) => slots.find((s) => s.id === id))
+  if (selected.some((s) => !s)) throw new Error('Slot not found')
+  if (selected.some((s) => s && !isSlotOpen(s))) {
+    throw new Error('One or more times are pending or booked. Pick open slots only.')
+  }
 
-  slot.booked = true
+  const paymentChoice: PaymentChoice =
+    payload.paymentChoice === 'deposit' ? 'deposit' : 'full'
+  const lessons: BookingLesson[] = selected.map((slot) => ({
+    slotId: slot!.id,
+    start: slot!.start,
+    end: slot!.end,
+    lessonType: slot!.lessonType,
+    instructorId: slot!.instructorId,
+    suburb: slot!.suburb,
+    priceCents: slot!.priceCents,
+  }))
+  const totalCents = lessons.reduce((sum, l) => sum + l.priceCents, 0)
+  const { amountPaidCents, remainingCents } = calcPaymentAmounts(totalCents, paymentChoice)
+  const first = lessons[0]
+  const id = `local_${Date.now().toString(36)}`
+
+  for (const slot of slots) {
+    if (slotIds.includes(slot.id)) {
+      slot.status = 'pending'
+      slot.booked = true
+      slot.bookingId = id
+    }
+  }
   writeSlots(slots)
 
   const booking: Booking = {
-    id: `local_${Date.now().toString(36)}`,
-    slotId: slot.id,
+    id,
+    slotId: first.slotId,
+    slotIds,
+    lessons,
     createdAt: new Date().toISOString(),
     studentName: payload.studentName.trim(),
     email: payload.email.trim().toLowerCase(),
@@ -118,15 +180,19 @@ export async function createBooking(payload: CreateBookingPayload): Promise<Book
     notes: payload.notes?.trim(),
     licence: { ...payload.licence, dataUrl: undefined },
     paymentStatus: payload.paymentMethod === 'demo' ? 'demo_paid' : 'paid',
-    amountCents: slot.priceCents,
-    lessonType: slot.lessonType,
-    instructorId: slot.instructorId,
-    start: slot.start,
-    end: slot.end,
-    suburb: slot.suburb,
+    paymentChoice,
+    totalCents,
+    amountPaidCents,
+    remainingCents,
+    approvalStatus: 'pending',
+    amountCents: amountPaidCents,
+    lessonType: first.lessonType,
+    instructorId: first.instructorId,
+    start: first.start,
+    end: first.end,
+    suburb: first.suburb,
   }
 
-  // Keep licence preview in local storage for confirmation screen
   if (payload.licence.dataUrl) {
     sessionStorage.setItem(`licence:${booking.id}`, payload.licence.dataUrl)
   }
@@ -141,6 +207,77 @@ export async function fetchBookings(): Promise<Booking[]> {
   const api = await tryApi<{ bookings: Booking[] }>('/api/bookings')
   if (api?.bookings) return api.bookings
   return readBookings()
+}
+
+export async function reviewBooking(
+  pin: string,
+  bookingId: string,
+  action: 'confirm' | 'reject',
+): Promise<{ booking: Booking; message: string }> {
+  try {
+    const res = await fetch(apiUrl('/api/admin/bookings'), {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Pin': pin,
+      },
+      body: JSON.stringify({ bookingId, action }),
+    })
+    const data = (await res.json()) as {
+      booking?: Booking
+      message?: string
+      error?: string
+    }
+    if (!res.ok) throw new Error(data.error || `Update failed (${res.status})`)
+    return {
+      booking: data.booking!,
+      message: data.message ?? 'Updated.',
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Update failed'
+    if (
+      msg.includes('PIN') ||
+      msg.includes('already') ||
+      msg.includes('not found') ||
+      msg.includes('Update failed')
+    ) {
+      throw e instanceof Error ? e : new Error(msg)
+    }
+    if (pin !== 'drivesa') throw new Error('Invalid admin PIN')
+
+    const bookings = readBookings()
+    const booking = bookings.find((b) => b.id === bookingId)
+    if (!booking) throw new Error('Booking not found')
+    if (booking.approvalStatus !== 'pending') {
+      throw new Error(`Booking is already ${booking.approvalStatus}`)
+    }
+
+    const next: ApprovalStatus = action === 'confirm' ? 'confirmed' : 'rejected'
+    booking.approvalStatus = next
+    const slotIds = booking.slotIds?.length ? booking.slotIds : [booking.slotId]
+    const slots = readSlots()
+    for (const slot of slots) {
+      if (!slotIds.includes(slot.id)) continue
+      if (action === 'confirm') {
+        slot.status = 'confirmed'
+        slot.booked = true
+        slot.bookingId = booking.id
+      } else {
+        slot.status = 'open'
+        slot.booked = false
+        slot.bookingId = undefined
+      }
+    }
+    writeSlots(slots)
+    writeBookings(bookings)
+    return {
+      booking,
+      message:
+        action === 'confirm'
+          ? 'Lessons confirmed. The block is locked in for the customer. (Local.)'
+          : 'Booking rejected. Those times are open again. (Local.)',
+    }
+  }
 }
 
 export function getInstructor(id: string) {
@@ -211,19 +348,18 @@ export async function savePrices(
     if (msg.includes('PIN') || msg.includes('Invalid') || msg.includes('Save failed')) {
       throw e instanceof Error ? e : new Error(msg)
     }
-    // API unreachable — demo local fallback with default PIN
     if (pin !== 'drivesa') throw new Error('Invalid admin PIN')
 
     writePrices(prices)
     const slots = readSlots()
     for (const slot of slots) {
-      if (!slot.booked) slot.priceCents = prices[slot.lessonType]
+      if (isSlotOpen(slot)) slot.priceCents = prices[slot.lessonType]
     }
     writeSlots(slots)
     return {
       prices,
       message: 'Prices saved locally (API offline). Open slots updated for customers.',
-      updatedOpenSlots: slots.filter((s) => !s.booked).length,
+      updatedOpenSlots: slots.filter((s) => isSlotOpen(s)).length,
     }
   }
 }
@@ -247,7 +383,7 @@ export async function updateSlotPrice(
 
     const slots = readSlots()
     const local = slots.find((s) => s.id === slotId)
-    if (local && !local.booked) {
+    if (local && isSlotOpen(local)) {
       local.priceCents = priceCents
       writeSlots(slots)
     }
@@ -257,6 +393,7 @@ export async function updateSlotPrice(
     if (
       msg.includes('PIN') ||
       msg.includes('booked') ||
+      msg.includes('pending') ||
       msg.includes('not found') ||
       msg.includes('Update failed')
     ) {
@@ -267,7 +404,7 @@ export async function updateSlotPrice(
     const slots = readSlots()
     const slot = slots.find((s) => s.id === slotId)
     if (!slot) throw new Error('Slot not found')
-    if (slot.booked) throw new Error('That lesson is already booked — price is locked.')
+    if (!isSlotOpen(slot)) throw new Error('That lesson is pending or booked — price is locked.')
     slot.priceCents = priceCents
     writeSlots(slots)
     return { message: 'Customer will see this price when they book this time. (Saved locally.)' }

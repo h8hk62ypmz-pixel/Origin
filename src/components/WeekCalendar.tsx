@@ -6,22 +6,22 @@ import {
   startOfWeek,
 } from 'date-fns'
 import type { LessonSlot } from '@shared/types'
-import { LESSON_LABELS } from '@shared/types'
+import { LESSON_LABELS, isSlotOpen, normalizeSlotStatus } from '@shared/types'
 import { formatAud, getInstructor } from '../lib/api'
 
 interface Props {
   slots: LessonSlot[]
   weekStart: Date
-  selectedId?: string
-  onSelect: (slot: LessonSlot) => void
+  selectedIds: string[]
+  onToggle: (slot: LessonSlot) => void
   onWeekChange: (next: Date) => void
 }
 
 export function WeekCalendar({
   slots,
   weekStart,
-  selectedId,
-  onSelect,
+  selectedIds,
+  onToggle,
   onWeekChange,
 }: Props) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -75,21 +75,35 @@ export function WeekCalendar({
               {daySlots.length === 0 && <div className="empty-day">No times</div>}
               {daySlots.map((slot, idx) => {
                 const instructor = getInstructor(slot.instructorId)
+                const status = normalizeSlotStatus(slot)
+                const open = isSlotOpen(slot)
                 return (
                   <button
                     key={slot.id}
                     type="button"
-                    className={`slot-chip${slot.booked ? ' is-booked' : ''}${
-                      selectedId === slot.id ? ' is-selected' : ''
+                    className={`slot-chip${
+                      status === 'pending' ? ' is-pending' : ''
+                    }${status === 'confirmed' ? ' is-booked' : ''}${
+                      selectedIds.includes(slot.id) ? ' is-selected' : ''
                     }`}
                     style={{ animationDelay: `${idx * 40}ms` }}
-                    disabled={slot.booked}
-                    onClick={() => onSelect(slot)}
-                    title={`${LESSON_LABELS[slot.lessonType]} with ${instructor?.name ?? 'instructor'}`}
+                    disabled={!open}
+                    onClick={() => onToggle(slot)}
+                    title={
+                      status === 'pending'
+                        ? 'Pending admin approval — not available'
+                        : status === 'confirmed'
+                          ? 'Confirmed booking'
+                          : `${LESSON_LABELS[slot.lessonType]} with ${instructor?.name ?? 'instructor'}`
+                    }
                   >
                     {format(new Date(slot.start), 'h:mm a')}
                     <small>
-                      {instructor?.name.split(' ')[0]} · {formatAud(slot.priceCents)}
+                      {status === 'pending'
+                        ? 'Pending'
+                        : status === 'confirmed'
+                          ? 'Booked'
+                          : `${instructor?.name.split(' ')[0]} · ${formatAud(slot.priceCents)}`}
                     </small>
                   </button>
                 )
@@ -107,7 +121,10 @@ export function WeekCalendar({
           <i style={{ background: 'var(--mark)' }} /> Selected
         </span>
         <span>
-          <i style={{ background: '#c9c4ba' }} /> Booked
+          <i style={{ background: '#d4a017' }} /> Pending approval
+        </span>
+        <span>
+          <i style={{ background: '#c9c4ba' }} /> Confirmed
         </span>
         {!isSameWeek(weekStart, today, { weekStartsOn: 1 }) && (
           <span>Showing week of {format(weekStart, 'd MMM')}</span>
@@ -115,23 +132,23 @@ export function WeekCalendar({
       </div>
 
       <div className="slot-list" aria-label="Open lessons this week">
-        <h4>Open this week</h4>
+        <h4>Tap to add lessons to your block</h4>
         {slots
           .filter(
             (s) =>
-              !s.booked &&
+              isSlotOpen(s) &&
               isSameWeek(new Date(s.start), weekStart, { weekStartsOn: 1 }),
           )
           .sort((a, b) => +new Date(a.start) - +new Date(b.start))
-          .slice(0, 12)
+          .slice(0, 16)
           .map((slot) => {
             const instructor = getInstructor(slot.instructorId)
             return (
               <button
                 key={`list-${slot.id}`}
                 type="button"
-                className={`slot-row${selectedId === slot.id ? ' is-selected' : ''}`}
-                onClick={() => onSelect(slot)}
+                className={`slot-row${selectedIds.includes(slot.id) ? ' is-selected' : ''}`}
+                onClick={() => onToggle(slot)}
               >
                 <span>
                   {format(new Date(slot.start), "EEE d MMM · h:mm a")}

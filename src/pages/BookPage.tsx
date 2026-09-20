@@ -11,8 +11,18 @@ import {
   formatAud,
   getInstructor,
 } from '../lib/api'
-import type { CreateBookingPayload, LessonSlot, LicenceAttachment } from '@shared/types'
-import { LESSON_LABELS } from '@shared/types'
+import type {
+  CreateBookingPayload,
+  LessonSlot,
+  LicenceAttachment,
+  PaymentChoice,
+} from '@shared/types'
+import {
+  DEPOSIT_PERCENT,
+  LESSON_LABELS,
+  calcPaymentAmounts,
+  isSlotOpen,
+} from '@shared/types'
 
 type Step = 1 | 2 | 3
 
@@ -24,10 +34,11 @@ export function BookPage() {
   const [weekStart, setWeekStart] = useState(() =>
     startOfWeek(new Date(), { weekStartsOn: 1 }),
   )
-  const [selected, setSelected] = useState<LessonSlot | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [step, setStep] = useState<Step>(1)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [paymentChoice, setPaymentChoice] = useState<PaymentChoice>('full')
 
   const [studentName, setStudentName] = useState('')
   const [email, setEmail] = useState('')
@@ -54,17 +65,38 @@ export function BookPage() {
     }
   }, [instructorFilter])
 
-  const visibleSlots = useMemo(() => slots, [slots])
+  const selectedSlots = useMemo(
+    () =>
+      selectedIds
+        .map((id) => slots.find((s) => s.id === id))
+        .filter((s): s is LessonSlot => Boolean(s && isSlotOpen(s)))
+        .sort((a, b) => +new Date(a.start) - +new Date(b.start)),
+    [selectedIds, slots],
+  )
 
-  function onSelectSlot(slot: LessonSlot) {
-    setSelected(slot)
+  const totalCents = selectedSlots.reduce((sum, s) => sum + s.priceCents, 0)
+  const amounts = calcPaymentAmounts(totalCents, paymentChoice)
+
+  function onToggleSlot(slot: LessonSlot) {
+    if (!isSlotOpen(slot)) return
+    setSelectedIds((ids) =>
+      ids.includes(slot.id) ? ids.filter((id) => id !== slot.id) : [...ids, slot.id],
+    )
+    setError(null)
+  }
+
+  function goToDetails() {
+    if (selectedSlots.length === 0) {
+      setError('Select at least one open lesson for your block.')
+      return
+    }
     setStep(2)
     setError(null)
   }
 
   async function goToPayment() {
     setError(null)
-    if (!selected) return
+    if (selectedSlots.length === 0) return
     if (!studentName.trim() || !email.trim() || !phone.trim()) {
       setError('Please fill in your name, email, and phone.')
       return
@@ -82,7 +114,12 @@ export function BookPage() {
     }
 
     try {
-      const checkout = await createCheckout(selected.id, email, studentName)
+      const checkout = await createCheckout(
+        selectedSlots.map((s) => s.id),
+        email,
+        studentName,
+        paymentChoice,
+      )
       setCheckoutHint(checkout.message ?? null)
       if (checkout.mode === 'stripe' && checkout.url) {
         window.location.href = checkout.url
@@ -95,18 +132,19 @@ export function BookPage() {
   }
 
   async function confirmPay() {
-    if (!selected) return
+    if (selectedSlots.length === 0) return
     setSubmitting(true)
     setError(null)
     try {
       const payload: CreateBookingPayload = {
-        slotId: selected.id,
+        slotIds: selectedSlots.map((s) => s.id),
         studentName,
         email,
         phone,
         notes,
         licence: licence as LicenceAttachment,
         paymentMethod: 'demo',
+        paymentChoice,
       }
       const booking = await createBooking(payload)
       navigate(`/confirmation/${booking.id}`, { state: { booking } })
@@ -117,15 +155,13 @@ export function BookPage() {
     }
   }
 
-  const instructor = selected ? getInstructor(selected.instructorId) : null
-
   return (
     <main className="shell section">
       <div className="section-head">
         <h2>Live lesson calendar</h2>
         <p>
-          Everyone sees the same open times. Choose a slot, attach your licence, and pay to lock
-          it in.
+          Build a block of lessons, pay in full or leave a {DEPOSIT_PERCENT}% deposit. Times show as
+          pending until admin confirms — they won’t be available to anyone else.
         </p>
       </div>
 
@@ -155,10 +191,10 @@ export function BookPage() {
             <div className="calendar-panel">Loading Adelaide availability…</div>
           ) : (
             <WeekCalendar
-              slots={visibleSlots}
+              slots={slots}
               weekStart={weekStart}
-              selectedId={selected?.id}
-              onSelect={onSelectSlot}
+              selectedIds={selectedIds}
+              onToggle={onToggleSlot}
               onWeekChange={setWeekStart}
             />
           )}
@@ -203,7 +239,7 @@ export function BookPage() {
         <aside className="wizard" aria-live="polite">
           <div className="steps">
             <span className={`step-pill${step === 1 ? ' is-active' : ''}${step > 1 ? ' is-done' : ''}`}>
-              1 Time
+              1 Block
             </span>
             <span className={`step-pill${step === 2 ? ' is-active' : ''}${step > 2 ? ' is-done' : ''}`}>
               2 Details & licence
@@ -214,21 +250,54 @@ export function BookPage() {
           {error && <div className="error-banner">{error}</div>}
 
           {step === 1 && (
-            <p style={{ margin: 0, opacity: 0.8, lineHeight: 1.5 }}>
-              Tap an open time on the calendar. Booked slots are greyed out for everyone the
-              moment they’re taken.
-            </p>
+            <>
+              <p style={{ margin: '0 0 1rem', opacity: 0.8, lineHeight: 1.5 }}>
+                Tap open times to build your lesson block. Pending times are held for someone else
+                and can’t be selected.
+              </p>
+              {selectedSlots.length > 0 && (
+                <div className="summary-box">
+                  <h3>
+                    {selectedSlots.length} lesson{selectedSlots.length > 1 ? 's' : ''} ·{' '}
+                    {formatAud(totalCents)}
+                  </h3>
+                  {selectedSlots.map((s) => {
+                    const inst = getInstructor(s.instructorId)
+                    return (
+                      <p key={s.id}>
+                        {format(new Date(s.start), "EEE d MMM · h:mm a")} — {inst?.name} ·{' '}
+                        {formatAud(s.priceCents)}
+                      </p>
+                    )
+                  })}
+                </div>
+              )}
+              <div className="wizard-actions">
+                <span />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={selectedSlots.length === 0}
+                  onClick={goToDetails}
+                >
+                  Continue with block
+                </button>
+              </div>
+            </>
           )}
 
-          {step >= 2 && selected && (
+          {step >= 2 && selectedSlots.length > 0 && (
             <div className="summary-box">
-              <h3>{format(new Date(selected.start), "EEE d MMM · h:mm a")}</h3>
-              <p>
-                {instructor?.name} · {selected.suburb}
-              </p>
-              <p>
-                {LESSON_LABELS[selected.lessonType]} · {formatAud(selected.priceCents)}
-              </p>
+              <h3>
+                Block · {selectedSlots.length} lesson{selectedSlots.length > 1 ? 's' : ''}
+              </h3>
+              <p>Total {formatAud(totalCents)}</p>
+              {selectedSlots.slice(0, 4).map((s) => (
+                <p key={s.id}>
+                  {format(new Date(s.start), "EEE d MMM · h:mm a")} · {LESSON_LABELS[s.lessonType]}
+                </p>
+              ))}
+              {selectedSlots.length > 4 && <p>+{selectedSlots.length - 4} more</p>}
             </div>
           )}
 
@@ -281,6 +350,37 @@ export function BookPage() {
 
               <LicenceUpload value={licence} onChange={setLicence} />
 
+              <fieldset className="pay-choice">
+                <legend>How would you like to pay?</legend>
+                <label className={`pay-option${paymentChoice === 'full' ? ' is-on' : ''}`}>
+                  <input
+                    type="radio"
+                    name="paymentChoice"
+                    checked={paymentChoice === 'full'}
+                    onChange={() => setPaymentChoice('full')}
+                  />
+                  <span>
+                    <strong>Pay full block</strong>
+                    <small>{formatAud(totalCents)} now</small>
+                  </span>
+                </label>
+                <label className={`pay-option${paymentChoice === 'deposit' ? ' is-on' : ''}`}>
+                  <input
+                    type="radio"
+                    name="paymentChoice"
+                    checked={paymentChoice === 'deposit'}
+                    onChange={() => setPaymentChoice('deposit')}
+                  />
+                  <span>
+                    <strong>Pay {DEPOSIT_PERCENT}% deposit</strong>
+                    <small>
+                      {formatAud(amounts.depositCents)} now · {formatAud(amounts.remainingCents)}{' '}
+                      remaining after approval
+                    </small>
+                  </span>
+                </label>
+              </fieldset>
+
               <div className="wizard-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => setStep(1)}>
                   Back
@@ -292,13 +392,24 @@ export function BookPage() {
             </>
           )}
 
-          {step === 3 && selected && (
+          {step === 3 && selectedSlots.length > 0 && (
             <>
               <div className="pay-demo">
-                <h3 style={{ margin: '0 0 0.35rem', fontSize: '1.35rem' }}>Pay now</h3>
+                <h3 style={{ margin: '0 0 0.35rem', fontSize: '1.35rem' }}>
+                  {paymentChoice === 'deposit' ? 'Pay deposit' : 'Pay full block'}
+                </h3>
                 <p className="hint">
                   {checkoutHint ||
-                    'Demo checkout — no card is charged. Add STRIPE_SECRET_KEY on Netlify for live AUD payments.'}
+                    'After payment, your block stays pending until an admin confirms it.'}
+                </p>
+                <p style={{ margin: '0 0 0.85rem' }}>
+                  <strong>Pay now:</strong> {formatAud(amounts.amountPaidCents)}
+                  {paymentChoice === 'deposit' && (
+                    <>
+                      {' '}
+                      · Remaining later: {formatAud(amounts.remainingCents)}
+                    </>
+                  )}
                 </p>
                 <div className="field-grid">
                   <div className="field full">
@@ -326,8 +437,8 @@ export function BookPage() {
                   onClick={() => void confirmPay()}
                 >
                   {submitting
-                    ? 'Booking…'
-                    : `Pay ${formatAud(selected.priceCents)} & book`}
+                    ? 'Submitting…'
+                    : `Pay ${formatAud(amounts.amountPaidCents)} & submit`}
                 </button>
               </div>
             </>

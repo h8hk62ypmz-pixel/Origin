@@ -1,4 +1,5 @@
 import type { Config, Context } from '@netlify/functions'
+import { isSlotOpen } from '../../shared/types'
 import {
   corsPreflight,
   json,
@@ -25,8 +26,8 @@ export default async (req: Request, _context: Context) => {
     const slots = await loadSlots()
     const slot = slots.find((s) => s.id === body.slotId)
     if (!slot) return json({ error: 'Slot not found' }, 404)
-    if (slot.booked) {
-      return json({ error: 'That lesson is already booked — price is locked.' }, 409)
+    if (!isSlotOpen(slot)) {
+      return json({ error: 'That lesson is pending or booked — price is locked.' }, 409)
     }
 
     slot.priceCents = Math.round(cents)

@@ -2,15 +2,21 @@ import { format } from 'date-fns'
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  fetchBookings,
   fetchPrices,
   fetchSlots,
   formatAud,
   getInstructor,
+  reviewBooking,
   savePrices,
   updateSlotPrice,
 } from '../lib/api'
-import type { LessonPriceMap, LessonSlot, LessonType } from '@shared/types'
-import { LESSON_LABELS, LESSON_PRICES } from '@shared/types'
+import type { Booking, LessonPriceMap, LessonSlot, LessonType } from '@shared/types'
+import {
+  LESSON_LABELS,
+  LESSON_PRICES,
+  isSlotOpen,
+} from '@shared/types'
 
 const PIN_KEY = 'drivesa.adminPin'
 
@@ -22,22 +28,30 @@ export function AdminPage() {
     dollarsFromCents(LESSON_PRICES),
   )
   const [slots, setSlots] = useState<LessonSlot[]>([])
+  const [pendingBookings, setPendingBookings] = useState<Booking[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [slotDrafts, setSlotDrafts] = useState<Record<string, string>>({})
 
-  async function loadAll(adminPin = pin) {
-    const [priceRes, slotRes] = await Promise.all([fetchPrices(), fetchSlots()])
+  async function loadAll() {
+    const [priceRes, slotRes, bookingRes] = await Promise.all([
+      fetchPrices(),
+      fetchSlots(),
+      fetchBookings(),
+    ])
     setPrices(priceRes.prices)
     setDraftDollars(dollarsFromCents(priceRes.prices))
-    setSlots(slotRes.filter((s) => !s.booked).sort((a, b) => +new Date(a.start) - +new Date(b.start)))
+    const openSlots = slotRes
+      .filter((s) => isSlotOpen(s))
+      .sort((a, b) => +new Date(a.start) - +new Date(b.start))
+    setSlots(openSlots)
     setSlotDrafts(
-      Object.fromEntries(
-        slotRes.filter((s) => !s.booked).map((s) => [s.id, (s.priceCents / 100).toFixed(2)]),
-      ),
+      Object.fromEntries(openSlots.map((s) => [s.id, (s.priceCents / 100).toFixed(2)])),
     )
-    void adminPin
+    setPendingBookings(
+      bookingRes.filter((b) => (b.approvalStatus ?? 'pending') === 'pending'),
+    )
   }
 
   useEffect(() => {
@@ -58,7 +72,7 @@ export function AdminPage() {
     }
     sessionStorage.setItem(PIN_KEY, pin.trim())
     setUnlocked(true)
-    setMessage('Admin unlocked. Default PIN is drivesa (set DRIVE_SA_ADMIN_PIN on Netlify to change).')
+    setMessage('Admin unlocked. Approve pending lesson blocks or edit prices.')
   }
 
   async function saveLessonPrices() {
@@ -108,12 +122,28 @@ export function AdminPage() {
     }
   }
 
+  async function decide(bookingId: string, action: 'confirm' | 'reject') {
+    if (!unlocked) return
+    setSaving(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const result = await reviewBooking(pin, bookingId, action)
+      setMessage(result.message)
+      await loadAll()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update booking')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (!unlocked) {
     return (
       <main className="shell section">
         <div className="section-head">
-          <h2>Admin — pricing</h2>
-          <p>Sign in with your admin PIN to edit lesson prices customers see at booking.</p>
+          <h2>Admin</h2>
+          <p>Approve pending lesson blocks and manage prices customers see.</p>
         </div>
         {error && <div className="error-banner">{error}</div>}
         <form className="wizard" style={{ maxWidth: 420 }} onSubmit={unlock}>
@@ -129,7 +159,7 @@ export function AdminPage() {
             />
           </div>
           <button type="submit" className="btn btn-primary" style={{ marginTop: '1rem' }}>
-            Unlock pricing
+            Unlock admin
           </button>
         </form>
       </main>
@@ -139,10 +169,10 @@ export function AdminPage() {
   return (
     <main className="shell section">
       <div className="section-head">
-        <h2>Admin — pricing</h2>
+        <h2>Admin</h2>
         <p>
-          Change default prices by lesson type, or set a one-off price on a single open time for a
-          customer.
+          Confirm or reject paid lesson blocks. Pending times stay off the open calendar until you
+          decide.
         </p>
       </div>
 
@@ -157,9 +187,79 @@ export function AdminPage() {
       )}
 
       <section className="wizard" style={{ marginBottom: '1.5rem' }}>
+        <h3 style={{ fontSize: '1.45rem', marginBottom: '0.75rem' }}>
+          Pending approval ({pendingBookings.length})
+        </h3>
+        {pendingBookings.length === 0 && (
+          <p style={{ margin: 0, opacity: 0.7 }}>No blocks waiting — you’re clear.</p>
+        )}
+        <div className="admin-slot-list">
+          {pendingBookings.map((b) => {
+            const lessons = b.lessons?.length
+              ? b.lessons
+              : [
+                  {
+                    slotId: b.slotId,
+                    start: b.start,
+                    instructorId: b.instructorId,
+                    lessonType: b.lessonType,
+                    suburb: b.suburb,
+                    priceCents: b.amountCents,
+                  },
+                ]
+            return (
+              <div key={b.id} className="admin-pending-card">
+                <div>
+                  <strong>
+                    {b.studentName} · {lessons.length} lesson
+                    {lessons.length > 1 ? 's' : ''}
+                  </strong>
+                  <div style={{ fontSize: '0.9rem', opacity: 0.75, marginTop: '0.25rem' }}>
+                    {b.email} · {b.phone}
+                    <br />
+                    Paid {formatAud(b.amountPaidCents ?? b.amountCents)}
+                    {b.paymentChoice === 'deposit'
+                      ? ` deposit (${formatAud(b.remainingCents ?? 0)} remaining)`
+                      : ' in full'}{' '}
+                    · block total {formatAud(b.totalCents ?? b.amountCents)}
+                  </div>
+                  <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem', fontSize: '0.9rem' }}>
+                    {lessons.map((l) => (
+                      <li key={l.slotId}>
+                        {format(new Date(l.start), "EEE d MMM · h:mm a")} —{' '}
+                        {getInstructor(l.instructorId)?.name} · {LESSON_LABELS[l.lessonType]}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="admin-slot-actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={saving}
+                    onClick={() => void decide(b.id, 'reject')}
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-mark"
+                    disabled={saving}
+                    onClick={() => void decide(b.id, 'confirm')}
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="wizard" style={{ marginBottom: '1.5rem' }}>
         <h3 style={{ fontSize: '1.45rem', marginBottom: '0.75rem' }}>Default lesson prices (AUD)</h3>
         <p style={{ marginTop: 0, opacity: 0.75, fontSize: '0.95rem' }}>
-          Saving updates every open (not yet booked) slot to match these amounts.
+          Saving updates every open (not pending/confirmed) slot to match these amounts.
         </p>
         <div className="field-grid">
           {lessonTypes.map((type) => (
@@ -192,7 +292,7 @@ export function AdminPage() {
           </button>
           <button
             type="button"
-            className="btn btn-mark"
+            className="btn btn-primary"
             disabled={saving}
             onClick={() => void saveLessonPrices()}
           >
@@ -206,7 +306,7 @@ export function AdminPage() {
           One-off price for a time slot
         </h3>
         <p style={{ marginTop: 0, opacity: 0.75, fontSize: '0.95rem' }}>
-          Override a single open lesson — useful for a custom quote for one customer.
+          Override a single open lesson — useful for a custom quote.
         </p>
         <div className="admin-slot-list">
           {slots.slice(0, 24).map((slot) => {
@@ -214,9 +314,7 @@ export function AdminPage() {
             return (
               <div key={slot.id} className="admin-slot-row">
                 <div>
-                  <strong>
-                    {format(new Date(slot.start), "EEE d MMM · h:mm a")}
-                  </strong>
+                  <strong>{format(new Date(slot.start), "EEE d MMM · h:mm a")}</strong>
                   <div style={{ fontSize: '0.9rem', opacity: 0.75 }}>
                     {instructor?.name} · {slot.suburb} · {LESSON_LABELS[slot.lessonType]} · currently{' '}
                     {formatAud(slot.priceCents)}

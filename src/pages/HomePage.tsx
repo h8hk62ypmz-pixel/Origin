@@ -12,8 +12,8 @@ export function HomePage() {
           </div>
           <h1>Book a driving lesson the moment a seat opens.</h1>
           <p>
-            Live calendar for South Australia instructors — attach your learner, provisional, or
-            international licence and pay straight away.
+            Live calendar for South Australia instructors — book a block of lessons, pay in full or
+            leave a deposit, attach your licence, and wait for admin confirmation.
           </p>
           <div className="hero-actions">
             <Link to="/book" className="btn btn-mark">
@@ -46,10 +46,10 @@ export function HomePage() {
               Upload a photo or PDF of a learner’s permit, P1/P2, full SA, interstate, or
               international licence so your instructor can verify before you meet.
             </p>
-            <h3 style={{ fontSize: '1.6rem', margin: '1.25rem 0 0.75rem' }}>3 · Pay instantly</h3>
+            <h3 style={{ fontSize: '1.6rem', margin: '1.25rem 0 0.75rem' }}>3 · Pay & await approval</h3>
             <p style={{ marginTop: 0, opacity: 0.8, lineHeight: 1.5 }}>
-              Secure card checkout in AUD. Demo mode works out of the box; connect Stripe for live
-              payments.
+              Pay the full block or a deposit. Those times show as pending (not available) until an
+              admin confirms — then you’re good to go.
             </p>
           </div>
           <div>

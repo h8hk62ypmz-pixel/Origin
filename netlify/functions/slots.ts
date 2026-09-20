@@ -1,5 +1,6 @@
 import type { Config, Context } from '@netlify/functions'
 import { generateOpenSlots } from '../../shared/catalogue'
+import { isSlotOpen, normalizeSlotStatus } from '../../shared/types'
 import {
   corsPreflight,
   json,
@@ -19,10 +20,10 @@ export default async (req: Request, _context: Context) => {
     let slots = await loadSlots()
     if (refresh) {
       const prices = await loadPrices()
-      const booked = slots.filter((s) => s.booked)
-      const bookedIds = new Set(booked.map((s) => s.id))
+      const held = slots.filter((s) => !isSlotOpen(s))
+      const heldIds = new Set(held.map((s) => s.id))
       const fresh = generateOpenSlots(new Date(), prices)
-      slots = [...booked, ...fresh.filter((s) => !bookedIds.has(s.id))]
+      slots = [...held, ...fresh.filter((s) => !heldIds.has(s.id))]
       await saveSlots(slots)
     }
 
@@ -32,7 +33,8 @@ export default async (req: Request, _context: Context) => {
 
     return json({
       slots: filtered,
-      available: filtered.filter((s) => !s.booked),
+      available: filtered.filter((s) => isSlotOpen(s)),
+      pending: filtered.filter((s) => normalizeSlotStatus(s) === 'pending'),
     })
   }
 

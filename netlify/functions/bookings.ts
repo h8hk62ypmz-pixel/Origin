@@ -1,5 +1,14 @@
 import type { Config, Context } from '@netlify/functions'
-import type { Booking, CreateBookingPayload } from '../../shared/types'
+import type {
+  Booking,
+  BookingLesson,
+  CreateBookingPayload,
+  PaymentChoice,
+} from '../../shared/types'
+import {
+  calcPaymentAmounts,
+  isSlotOpen,
+} from '../../shared/types'
 import {
   corsPreflight,
   json,
@@ -14,6 +23,15 @@ function bookingId(): string {
   return `bk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
+function resolveSlotIds(body: CreateBookingPayload): string[] {
+  const ids = body.slotIds?.length
+    ? body.slotIds
+    : body.slotId
+      ? [body.slotId]
+      : []
+  return [...new Set(ids)]
+}
+
 export default async (req: Request, _context: Context) => {
   if (req.method === 'OPTIONS') return corsPreflight()
 
@@ -24,8 +42,15 @@ export default async (req: Request, _context: Context) => {
 
   if (req.method === 'POST') {
     const body = (await req.json()) as CreateBookingPayload
+    const slotIds = resolveSlotIds(body)
 
-    if (!body.slotId || !body.studentName || !body.email || !body.phone || !body.licence) {
+    if (
+      slotIds.length === 0 ||
+      !body.studentName ||
+      !body.email ||
+      !body.phone ||
+      !body.licence
+    ) {
       return json({ error: 'Missing required booking fields' }, 400)
     }
 
@@ -33,10 +58,30 @@ export default async (req: Request, _context: Context) => {
       return json({ error: 'A licence document attachment is required' }, 400)
     }
 
+    const paymentChoice: PaymentChoice = body.paymentChoice === 'deposit' ? 'deposit' : 'full'
+
     const slots = await loadSlots()
-    const slot = slots.find((s) => s.id === body.slotId)
-    if (!slot) return json({ error: 'Slot not found' }, 404)
-    if (slot.booked) return json({ error: 'That time was just booked. Pick another slot.' }, 409)
+    const selected = slotIds.map((id) => slots.find((s) => s.id === id))
+    if (selected.some((s) => !s)) return json({ error: 'One or more slots not found' }, 404)
+    if (selected.some((s) => s && !isSlotOpen(s))) {
+      return json(
+        { error: 'One or more times are pending or already booked. Pick open slots only.' },
+        409,
+      )
+    }
+
+    const lessons: BookingLesson[] = selected.map((slot) => ({
+      slotId: slot!.id,
+      start: slot!.start,
+      end: slot!.end,
+      lessonType: slot!.lessonType,
+      instructorId: slot!.instructorId,
+      suburb: slot!.suburb,
+      priceCents: slot!.priceCents,
+    }))
+
+    const totalCents = lessons.reduce((sum, l) => sum + l.priceCents, 0)
+    const { amountPaidCents, remainingCents } = calcPaymentAmounts(totalCents, paymentChoice)
 
     const id = bookingId()
     let blobKey: string | undefined
@@ -56,9 +101,12 @@ export default async (req: Request, _context: Context) => {
       })
     }
 
+    const first = lessons[0]
     const booking: Booking = {
       id,
-      slotId: slot.id,
+      slotId: first.slotId,
+      slotIds: lessons.map((l) => l.slotId),
+      lessons,
       createdAt: new Date().toISOString(),
       studentName: body.studentName.trim(),
       email: body.email.trim().toLowerCase(),
@@ -73,15 +121,27 @@ export default async (req: Request, _context: Context) => {
         blobKey,
       },
       paymentStatus: body.paymentMethod === 'demo' ? 'demo_paid' : 'paid',
-      amountCents: slot.priceCents,
-      lessonType: slot.lessonType,
-      instructorId: slot.instructorId,
-      start: slot.start,
-      end: slot.end,
-      suburb: slot.suburb,
+      paymentChoice,
+      totalCents,
+      amountPaidCents,
+      remainingCents,
+      approvalStatus: 'pending',
+      amountCents: amountPaidCents,
+      lessonType: first.lessonType,
+      instructorId: first.instructorId,
+      start: first.start,
+      end: first.end,
+      suburb: first.suburb,
     }
 
-    slot.booked = true
+    // Hold every lesson in the block as pending — not available until admin confirms
+    for (const slot of slots) {
+      if (slotIds.includes(slot.id)) {
+        slot.status = 'pending'
+        slot.booked = true
+        slot.bookingId = id
+      }
+    }
     await saveSlots(slots)
 
     const bookings = await loadBookings()

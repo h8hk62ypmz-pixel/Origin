@@ -73,6 +73,7 @@ export function generateOpenSlots(
           lessonType,
           priceCents: prices[lessonType],
           suburb: instructor.suburb,
+          status: 'open',
           booked: false,
         })
       })

@@ -1,6 +1,6 @@
 import { getStore } from '@netlify/blobs'
 import type { Booking, LessonPriceMap, LessonSlot } from '../../../shared/types'
-import { LESSON_PRICES } from '../../../shared/types'
+import { LESSON_PRICES, isSlotOpen, normalizeSlotStatus } from '../../../shared/types'
 import { generateOpenSlots } from '../../../shared/catalogue'
 
 const BOOKINGS_KEY = 'all-bookings'
@@ -35,6 +35,17 @@ export async function savePrices(prices: LessonPriceMap): Promise<void> {
   await bookingsStore().setJSON(PRICES_KEY, prices)
 }
 
+export function normalizeSlots(slots: LessonSlot[]): LessonSlot[] {
+  return slots.map((slot) => {
+    const status = normalizeSlotStatus(slot)
+    return {
+      ...slot,
+      status,
+      booked: status !== 'open',
+    }
+  })
+}
+
 export async function loadSlots(): Promise<LessonSlot[]> {
   const store = bookingsStore()
   let slots = (await store.get(SLOTS_KEY, { type: 'json' })) as LessonSlot[] | null
@@ -43,20 +54,20 @@ export async function loadSlots(): Promise<LessonSlot[]> {
     slots = generateOpenSlots(new Date(), prices)
     await store.setJSON(SLOTS_KEY, slots)
   }
-  return slots
+  return normalizeSlots(slots)
 }
 
 export async function saveSlots(slots: LessonSlot[]): Promise<void> {
-  await bookingsStore().setJSON(SLOTS_KEY, slots)
+  await bookingsStore().setJSON(SLOTS_KEY, normalizeSlots(slots))
 }
 
-/** Reprice unbooked slots from the lesson-type price map. Booked slots keep their price. */
+/** Reprice open slots from the lesson-type price map. Held/confirmed keep their price. */
 export function applyPricesToOpenSlots(
   slots: LessonSlot[],
   prices: LessonPriceMap,
 ): LessonSlot[] {
   return slots.map((slot) =>
-    slot.booked ? slot : { ...slot, priceCents: prices[slot.lessonType] },
+    isSlotOpen(slot) ? { ...slot, priceCents: prices[slot.lessonType] } : slot,
   )
 }
 

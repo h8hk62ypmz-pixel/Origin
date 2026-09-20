@@ -14,6 +14,10 @@ export type LessonType =
   | 'international_conversion'
 
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'demo_paid'
+export type PaymentChoice = 'full' | 'deposit'
+/** Admin must approve after customer pays — slots stay held as pending until then. */
+export type ApprovalStatus = 'pending' | 'confirmed' | 'rejected'
+export type SlotStatus = 'open' | 'pending' | 'confirmed'
 
 export interface Instructor {
   id: string
@@ -34,24 +38,38 @@ export interface LessonSlot {
   lessonType: LessonType
   priceCents: number
   suburb: string
-  booked: boolean
+  /** @deprecated use status — kept for older stored data */
+  booked?: boolean
+  status: SlotStatus
+  bookingId?: string
 }
 
 export interface LicenceAttachment {
   type: LicenceType
   fileName: string
   contentType: string
-  /** Base64 data URL for demo / client upload */
   dataUrl?: string
-  /** Blob key when stored server-side */
   blobKey?: string
   licenceNumber?: string
   countryOrState?: string
 }
 
+export interface BookingLesson {
+  slotId: string
+  start: string
+  end: string
+  lessonType: LessonType
+  instructorId: string
+  suburb: string
+  priceCents: number
+}
+
 export interface Booking {
   id: string
+  /** First lesson — kept for older UI */
   slotId: string
+  slotIds: string[]
+  lessons: BookingLesson[]
   createdAt: string
   studentName: string
   email: string
@@ -59,6 +77,13 @@ export interface Booking {
   notes?: string
   licence: LicenceAttachment
   paymentStatus: PaymentStatus
+  paymentChoice: PaymentChoice
+  /** Full price of the block before deposit split */
+  totalCents: number
+  /** What the customer paid now (full or deposit) */
+  amountPaidCents: number
+  remainingCents: number
+  approvalStatus: ApprovalStatus
   amountCents: number
   lessonType: LessonType
   instructorId: string
@@ -68,13 +93,16 @@ export interface Booking {
 }
 
 export interface CreateBookingPayload {
-  slotId: string
+  /** Prefer slotIds for a block; slotId alone still works for one lesson */
+  slotId?: string
+  slotIds?: string[]
   studentName: string
   email: string
   phone: string
   notes?: string
   licence: LicenceAttachment
   paymentMethod: 'card' | 'demo'
+  paymentChoice: PaymentChoice
 }
 
 export const LICENCE_LABELS: Record<LicenceType, string> = {
@@ -102,9 +130,46 @@ export const LESSON_PRICES: Record<LessonType, number> = {
   international_conversion: 9500,
 }
 
+/** Deposit is 30% of the block total (rounded to nearest cent). */
+export const DEPOSIT_PERCENT = 30
+
 export type LessonPriceMap = Record<LessonType, number>
 
 export function isLessonType(value: string): value is LessonType {
   return value in LESSON_LABELS
 }
 
+export function normalizeSlotStatus(slot: LessonSlot): SlotStatus {
+  if (slot.status) return slot.status
+  return slot.booked ? 'confirmed' : 'open'
+}
+
+export function isSlotOpen(slot: LessonSlot): boolean {
+  return normalizeSlotStatus(slot) === 'open'
+}
+
+export function isSlotUnavailable(slot: LessonSlot): boolean {
+  return !isSlotOpen(slot)
+}
+
+export function calcDepositCents(totalCents: number): number {
+  return Math.round((totalCents * DEPOSIT_PERCENT) / 100)
+}
+
+export function calcPaymentAmounts(totalCents: number, choice: PaymentChoice) {
+  if (choice === 'full') {
+    return { amountPaidCents: totalCents, remainingCents: 0, depositCents: calcDepositCents(totalCents) }
+  }
+  const depositCents = calcDepositCents(totalCents)
+  return {
+    amountPaidCents: depositCents,
+    remainingCents: Math.max(0, totalCents - depositCents),
+    depositCents,
+  }
+}
+
+export const APPROVAL_LABELS: Record<ApprovalStatus, string> = {
+  pending: 'Pending admin approval',
+  confirmed: 'Confirmed',
+  rejected: 'Rejected',
+}

@@ -479,6 +479,90 @@ h3,
   padding: 0.65rem 1rem;
 }
 
+.pay-choice {
+  border: 1px solid var(--line);
+  padding: 0.85rem;
+  margin: 1rem 0;
+}
+
+.pay-choice legend {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  opacity: 0.7;
+  padding: 0 0.35rem;
+}
+
+.pay-option {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  padding: 0.7rem 0.75rem;
+  margin-bottom: 0.45rem;
+  border: 1.5px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+}
+
+.pay-option.is-on {
+  border-color: var(--bush);
+  background: var(--bush-soft);
+}
+
+.pay-option input {
+  margin-top: 0.2rem;
+}
+
+.pay-option strong {
+  display: block;
+}
+
+.pay-option small {
+  display: block;
+  opacity: 0.75;
+  margin-top: 0.15rem;
+}
+
+.status-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.3rem 0.55rem;
+  margin-bottom: 0.55rem;
+  border-radius: var(--radius);
+}
+
+.status-pending {
+  background: #f3e2a8;
+  color: #5c4a10;
+}
+
+.status-confirmed {
+  background: var(--bush-soft);
+  color: var(--ok);
+}
+
+.status-rejected {
+  background: #f8e3df;
+  color: var(--danger);
+}
+
+.success-panel .check.is-pending {
+  background: #c99812;
+  font-size: 1.6rem;
+}
+
+.admin-pending-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
 .slot-chip:hover {
   background: #2d463c;
   transform: translateX(2px);
@@ -494,6 +578,14 @@ h3,
   color: #5a574f;
   cursor: not-allowed;
   text-decoration: line-through;
+}
+
+.slot-chip.is-pending {
+  background: #c99812;
+  color: #1a1a12;
+  cursor: not-allowed;
+  text-decoration: none;
+  opacity: 0.92;
 }
 
 .slot-chip small {

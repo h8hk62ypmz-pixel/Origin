@@ -1,6 +1,6 @@
 import type { Config, Context } from '@netlify/functions'
 import type { LessonPriceMap, LessonType } from '../../shared/types'
-import { LESSON_LABELS, LESSON_PRICES, isLessonType } from '../../shared/types'
+import { LESSON_LABELS, LESSON_PRICES, isLessonType, isSlotOpen } from '../../shared/types'
 import { generateOpenSlots } from '../../shared/catalogue'
 import {
   applyPricesToOpenSlots,
@@ -57,17 +57,16 @@ export default async (req: Request, _context: Context) => {
     let updatedOpen = 0
 
     if (body.regenerateSlots) {
-      const booked = slots.filter((s) => s.booked)
+      const held = slots.filter((s) => !isSlotOpen(s))
       const fresh = generateOpenSlots(new Date(), next)
-      // Keep booked slot ids so history stays consistent
-      const bookedIds = new Set(booked.map((s) => s.id))
-      slots = [...booked, ...fresh.filter((s) => !bookedIds.has(s.id))]
-      updatedOpen = slots.filter((s) => !s.booked).length
+      const heldIds = new Set(held.map((s) => s.id))
+      slots = [...held, ...fresh.filter((s) => !heldIds.has(s.id))]
+      updatedOpen = slots.filter((s) => isSlotOpen(s)).length
       await saveSlots(slots)
     } else if (body.applyToOpenSlots !== false) {
       const before = slots.map((s) => s.priceCents)
       slots = applyPricesToOpenSlots(slots, next)
-      updatedOpen = slots.filter((s, i) => !s.booked && s.priceCents !== before[i]).length
+      updatedOpen = slots.filter((s, i) => isSlotOpen(s) && s.priceCents !== before[i]).length
       await saveSlots(slots)
     }
 

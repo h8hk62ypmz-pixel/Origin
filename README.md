@@ -36,14 +36,13 @@ npm run open:ios    # opens Xcode (Mac required)
 
 See [`ios/README.md`](ios/README.md). Optional: `VITE_API_BASE=https://your-netlify-site.netlify.app` so the phone uses your live API.
 
-## Admin pricing
+## Admin pricing & approvals
 
-1. Open **Admin** in the nav (`/admin`).
-2. Enter the PIN (default: `drivesa`).
-3. Edit **default lesson prices** and click **Save prices for customers** — all open (unbooked) times update.
-4. Or set a **one-off price** on a single open slot for a custom customer quote.
+1. Open **Admin** (`/admin`), PIN default `drivesa`.
+2. **Pending approval** — confirm or reject paid lesson blocks. Pending times stay held (not bookable) until you confirm.
+3. Edit **default lesson prices** or one-off slot prices for open times only.
 
-On Netlify, set env var `DRIVE_SA_ADMIN_PIN` to your own secret PIN.
+On Netlify, set `DRIVE_SA_ADMIN_PIN` to your own secret.
 
 ## Stack
 

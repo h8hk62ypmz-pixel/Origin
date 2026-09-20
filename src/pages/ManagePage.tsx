@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { fetchBookings, formatAud, getInstructor } from '../lib/api'
 import type { Booking } from '@shared/types'
-import { LESSON_LABELS, LICENCE_LABELS } from '@shared/types'
+import { APPROVAL_LABELS, LESSON_LABELS, LICENCE_LABELS } from '@shared/types'
 
 export function ManagePage() {
   const [bookings, setBookings] = useState<Booking[]>([])
@@ -20,8 +20,8 @@ export function ManagePage() {
       <div className="section-head">
         <h2>My bookings</h2>
         <p>
-          Confirmed lessons with licence attachments. In production this view is scoped to your
-          email; here we show bookings from this browser / site store.
+          Pending blocks are held on the calendar until an admin confirms. Confirmed lessons are
+          good to go.
         </p>
       </div>
 
@@ -38,23 +38,45 @@ export function ManagePage() {
 
       <div className="instructor-list">
         {bookings.map((b) => {
-          const instructor = getInstructor(b.instructorId)
+          const lessons = b.lessons?.length
+            ? b.lessons
+            : [
+                {
+                  slotId: b.slotId,
+                  start: b.start,
+                  instructorId: b.instructorId,
+                  lessonType: b.lessonType,
+                  priceCents: b.amountCents,
+                },
+              ]
+          const status = b.approvalStatus ?? 'confirmed'
           return (
             <article key={b.id} className="calendar-panel" style={{ marginBottom: '0.85rem' }}>
+              <div className={`status-badge status-${status}`}>{APPROVAL_LABELS[status]}</div>
               <h3 style={{ fontSize: '1.45rem', marginBottom: '0.35rem' }}>
-                {format(new Date(b.start), "EEE d MMM · h:mm a")}
+                {lessons.length} lesson{lessons.length > 1 ? 's' : ''} ·{' '}
+                {formatAud(b.totalCents ?? b.amountCents)}
               </h3>
               <p style={{ margin: '0 0 0.5rem', opacity: 0.8 }}>
-                {instructor?.name} · {b.suburb} · {LESSON_LABELS[b.lessonType]}
+                Paid {formatAud(b.amountPaidCents ?? b.amountCents)}
+                {b.paymentChoice === 'deposit'
+                  ? ` deposit · ${formatAud(b.remainingCents ?? 0)} remaining`
+                  : ' in full'}
               </p>
+              <ul style={{ margin: '0 0 0.5rem', paddingLeft: '1.1rem', opacity: 0.85 }}>
+                {lessons.map((l) => (
+                  <li key={l.slotId}>
+                    {format(new Date(l.start), "EEE d MMM · h:mm a")} —{' '}
+                    {getInstructor(l.instructorId)?.name} · {LESSON_LABELS[l.lessonType]}
+                  </li>
+                ))}
+              </ul>
               <p style={{ margin: '0 0 0.35rem' }}>
-                <strong>{b.studentName}</strong> · {formatAud(b.amountCents)} ·{' '}
-                {b.paymentStatus.replace('_', ' ')}
+                <strong>{b.studentName}</strong>
               </p>
               <p style={{ margin: 0, fontSize: '0.92rem', opacity: 0.75 }}>
                 Licence: {LICENCE_LABELS[b.licence.type]}
                 {b.licence.fileName ? ` (${b.licence.fileName})` : ''}
-                {b.licence.blobKey ? ' · stored securely' : ''}
               </p>
               <Link
                 to={`/confirmation/${b.id}`}
@@ -62,7 +84,7 @@ export function ManagePage() {
                 className="btn btn-ghost"
                 style={{ marginTop: '0.85rem' }}
               >
-                View confirmation
+                View details
               </Link>
             </article>
           )
